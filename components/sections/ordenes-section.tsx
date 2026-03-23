@@ -18,6 +18,28 @@ import {
 import { Plus, Pencil, Search } from "lucide-react"
 import type { Orden, EstadoOrden, RutaNum, Frecuencia, TipoOrden } from "@/lib/data"
 
+const weekDays = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"] as const
+
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+}
+
+function parseFrecuencia(value: string | undefined) {
+  if (!value) return [] as string[]
+
+  const normalized = normalizeText(value)
+  if (normalized.includes("todos los dias")) return [...weekDays]
+
+  return weekDays.filter((day) => normalized.includes(normalizeText(day)))
+}
+
+function formatFrecuencia(days: string[]) {
+  return days.join(", ")
+}
+
 function estadoBadge(estado: EstadoOrden) {
   switch (estado) {
     case "activo":
@@ -42,7 +64,7 @@ const emptyOrden: Omit<Orden, "id" | "created_at" | "updated_at"> = {
   producto: "Baño Portátil Estándar",
   cantidad: 1,
   ruta: 1,
-  frecuencia: "Lunes y Miércoles",
+  frecuencia: "Lunes",
   domicilio: "",
   fecha_inicio: new Date().toISOString().split("T")[0],
   fecha_fin: null,
@@ -92,6 +114,16 @@ export function OrdenesSection() {
   const closeDialog = () => {
     setEditOrder(null)
     setNewOrder(false)
+  }
+
+  const selectedDays = parseFrecuencia(form.frecuencia)
+
+  const toggleFrequencyDay = (day: string) => {
+    const nextDays = selectedDays.includes(day)
+      ? selectedDays.filter((selectedDay) => selectedDay !== day)
+      : [...selectedDays, day]
+
+    setForm({ ...form, frecuencia: formatFrecuencia(nextDays) as Frecuencia })
   }
 
   const isOpen = !!editOrder || newOrder
@@ -244,20 +276,32 @@ export function OrdenesSection() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium">Frecuencia</label>
-                <Select value={form.frecuencia} onValueChange={(v) => setForm({ ...form, frecuencia: v as Frecuencia })}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todos los dias">Todos los dias</SelectItem>
-                    <SelectItem value="Lunes y Miercoles">Lunes y Miercoles</SelectItem>
-                    <SelectItem value="Martes y Jueves">Martes y Jueves</SelectItem>
-                    <SelectItem value="Lunes, Miercoles y Viernes">L, M, V</SelectItem>
-                    <SelectItem value="Solo Sabados">Solo Sabados</SelectItem>
-                    <SelectItem value="Semanal">Semanal</SelectItem>
-                  </SelectContent>
-                </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Frecuencia</label>
+              <div className="grid grid-cols-4 gap-3 sm:grid-cols-7">
+                {weekDays.map((day) => {
+                  const isSelected = selectedDays.includes(day)
+
+                  return (
+                    <div key={day} className="flex flex-col items-center gap-1">
+                      <span className="text-xs text-muted-foreground">{day.charAt(0)}</span>
+                      <Button
+                        type="button"
+                        variant={isSelected ? "default" : "outline"}
+                        className="h-10 w-full min-w-0 px-0"
+                        aria-label={day}
+                        onClick={() => toggleFrequencyDay(day)}
+                      >
+                        <span className="sr-only">{day}</span>
+                      </Button>
+                    </div>
+                  )
+                })}
               </div>
+              <p className="text-xs text-muted-foreground">
+                {selectedDays.length > 0 ? `Dias seleccionados: ${formatFrecuencia(selectedDays)}` : "Selecciona uno o mas dias para el servicio."}
+              </p>
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">Domicilio</label>

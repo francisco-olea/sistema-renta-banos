@@ -4,13 +4,7 @@ export type EstadoOrden = "activo" | "terminado" | "cancelado"
 export type TipoOrden = "Obra" | "Evento" | "Otro"
 export type Producto = "Bano" | "Lavamanos"
 export type RutaNum = 1 | 2 | 3 | 4
-export type Frecuencia =
-  | "Todos los dias"
-  | "Lunes y Miercoles"
-  | "Martes y Jueves"
-  | "Lunes, Miercoles y Viernes"
-  | "Solo Sabados"
-  | "Semanal"
+export type Frecuencia = string
 export type EstatusRuta = "pendiente" | "en_proceso" | "completado"
 
 export interface Orden {
@@ -50,6 +44,16 @@ export interface ProductoItem {
   precio_renta: number
   stock: number
   activo: boolean
+  color?: string
+  notas?: string
+  eje?: string
+  medida?: string
+  tanques?: number
+  agua?: number
+  drenaje?: number
+  tablones?: number
+  ruedas?: number
+  tiempo?: number
 }
 
 export interface RegistroRuta {
@@ -95,8 +99,10 @@ export const clientesData: Cliente[] = [
 ]
 
 export const productosData: ProductoItem[] = [
-  { id: 1, nombre: "Baño Portátil Estándar", descripcion: "Baño portátil tipo estándar con tanque de 250L", precio_renta: 1500, stock: 50, activo: true },
-  { id: 2, nombre: "Lavamanos Portátil", descripcion: "Estación de lavamanos portátil con depósito de agua", precio_renta: 800, stock: 20, activo: true },
+  { id: 1, nombre: "Baño Portátil Estándar", descripcion: "Baño portátil tipo estándar con tanque de 250L", precio_renta: 1500, stock: 50, activo: true, color: "Azul", notas: "Tanque de 250L" },
+  { id: 2, nombre: "Lavamanos Portátil", descripcion: "Estación de lavamanos portátil con depósito de agua", precio_renta: 800, stock: 20, activo: true, color: "Gris", notas: "Incluye depósito de agua" },
+  { id: 3, nombre: "Caseta", descripcion: "Caseta para renta con configuración personalizable", precio_renta: 2200, stock: 6, activo: true, color: "", notas: "", eje: "", medida: "", tanques: undefined, agua: undefined, drenaje: undefined },
+  { id: 4, nombre: "Andiamos", descripcion: "Andamio para renta con accesorios configurables", precio_renta: 950, stock: 12, activo: true, color: "", notas: "", tablones: undefined, ruedas: undefined, tiempo: undefined },
 ]
 
 export const ordenesData: Orden[] = [
