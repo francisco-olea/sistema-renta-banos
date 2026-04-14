@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { AppSidebar, MobileHeader, type Section } from "@/components/app-sidebar"
+import { useAppState } from "@/lib/app-context"
 import { PanelSection } from "@/components/sections/panel-section"
 import { OrdenesSection } from "@/components/sections/ordenes-section"
 import { RutasSection } from "@/components/sections/rutas-section"
@@ -23,6 +24,14 @@ const sectionLabels: Record<Section, string> = {
 export function DashboardLayout() {
   const [activeSection, setActiveSection] = useState<Section>("panel")
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { refreshRutasFromOrdenes } = useAppState()
+
+  const handleNavigate = (section: Section) => {
+    setActiveSection(section)
+    if (section === "rutas") {
+      refreshRutasFromOrdenes()
+    }
+  }
 
   const renderSection = () => {
     switch (activeSection) {
@@ -47,7 +56,7 @@ export function DashboardLayout() {
     <div className="flex min-h-screen bg-background">
       <AppSidebar
         active={activeSection}
-        onNavigate={setActiveSection}
+        onNavigate={handleNavigate}
         mobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}
       />

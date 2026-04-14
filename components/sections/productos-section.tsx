@@ -10,7 +10,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -20,7 +20,12 @@ import { Plus, Pencil } from "lucide-react"
 import type { ProductoItem } from "@/lib/data"
 
 function formatMXN(amount: number) {
-  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount)
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount)
 }
 
 function parseOptionalNumber(value: string) {
@@ -142,6 +147,9 @@ export function ProductosSection() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{newProducto ? "Nuevo Producto" : `Editar Producto #${editProducto?.id}`}</DialogTitle>
+            <DialogDescription>
+              Configura nombre, precio, stock y caracteristicas del producto.
+            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
@@ -159,7 +167,7 @@ export function ProductosSection() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Precio Renta (MXN)</label>
-                <Input type="number" value={form.precio_renta ?? ""} onChange={(e) => setForm({ ...form, precio_renta: Number(e.target.value) })} />
+                <Input type="number" step="1" value={form.precio_renta ?? ""} onChange={(e) => setForm({ ...form, precio_renta: Number(e.target.value) })} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Stock</label>

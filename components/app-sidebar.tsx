@@ -53,7 +53,7 @@ function NavContent({ active, onNavigate, onClose }: { active: Section; onNaviga
           <Bubbles className="h-5 w-5 text-primary-foreground" />
         </div>
         <div className="flex flex-col">
-          <span className="text-sm font-semibold text-sidebar-foreground leading-tight">SaniMod</span>
+          <span className="text-sm font-semibold text-sidebar-foreground leading-tight">Servicios de Renta</span>
           <span className="text-xs text-muted-foreground">Gestion de Renta</span>
         </div>
       </div>

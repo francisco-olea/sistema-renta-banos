@@ -13,13 +13,23 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog"
 import { Plus, Search, DollarSign, CreditCard, Banknote } from "lucide-react"
 import type { Pago } from "@/lib/data"
 
+function toNumber(value: unknown) {
+  const n = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
 function formatMXN(amount: number) {
-  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount)
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(toNumber(amount))
 }
 
 function estatusPagoBadge(estatus: Pago["estatus"]) {
@@ -57,9 +67,12 @@ export function CajaSection() {
   }, [pagos, search, filterEstatus])
 
   const stats = useMemo(() => {
-    const totalPagado = pagos.filter((p) => p.estatus === "pagado").reduce((s, p) => s + p.monto, 0)
-    const totalPendiente = pagos.filter((p) => p.estatus === "pendiente").reduce((s, p) => s + p.monto, 0)
-    return { totalPagado, totalPendiente, totalPagos: pagos.length }
+    const currentMonth = new Date().toISOString().slice(0, 7)
+    const pagosMes = pagos.filter((p) => (p.fecha || "").startsWith(currentMonth))
+    const totalPagado = pagosMes.filter((p) => p.estatus === "pagado").reduce((s, p) => s + toNumber(p.monto), 0)
+    const totalPendiente = pagosMes.filter((p) => p.estatus === "pendiente").reduce((s, p) => s + toNumber(p.monto), 0)
+    const totalPagosRealizados = pagosMes.filter((p) => p.estatus === "pagado").length
+    return { totalPagado, totalPendiente, totalPagosRealizados }
   }, [pagos])
 
   const savePago = () => {
@@ -102,7 +115,7 @@ export function CajaSection() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Pagos</CardTitle>
             <Banknote className="h-4 w-4 text-sky-600" />
           </CardHeader>
-          <CardContent><p className="text-2xl font-bold">{stats.totalPagos}</p></CardContent>
+          <CardContent><p className="text-2xl font-bold">{stats.totalPagosRealizados}</p></CardContent>
         </Card>
       </div>
 
@@ -154,7 +167,7 @@ export function CajaSection() {
                     <TableCell className="font-mono text-xs">{p.id}</TableCell>
                     <TableCell className="font-mono text-xs">{p.orden_id}</TableCell>
                     <TableCell className="font-medium max-w-[150px] truncate">{p.cliente_nombre}</TableCell>
-                    <TableCell className="font-semibold">{formatMXN(p.monto)}</TableCell>
+                    <TableCell className="font-semibold">{formatMXN(toNumber(p.monto))}</TableCell>
                     <TableCell className="hidden sm:table-cell">{p.metodo}</TableCell>
                     <TableCell className="hidden md:table-cell text-xs">{p.fecha}</TableCell>
                     <TableCell className="hidden lg:table-cell text-xs text-muted-foreground max-w-[150px] truncate">{p.concepto}</TableCell>
@@ -171,6 +184,9 @@ export function CajaSection() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Registrar Pago</DialogTitle>
+            <DialogDescription>
+              Captura la informacion del pago para una orden activa.
+            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
@@ -193,7 +209,7 @@ export function CajaSection() {
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Monto (MXN)</label>
-                <Input type="number" value={form.monto ?? ""} onChange={(e) => setForm({ ...form, monto: Number(e.target.value) })} />
+                <Input type="number" step="1" value={form.monto ?? ""} onChange={(e) => setForm({ ...form, monto: Number(e.target.value) })} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Metodo</label>

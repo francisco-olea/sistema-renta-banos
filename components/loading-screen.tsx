@@ -27,7 +27,7 @@ export function LoadingScreen({ onFinish }: { onFinish: () => void }) {
           <Droplets className="h-12 w-12 text-primary-foreground" />
         </div>
         <h1 className="text-2xl font-bold text-primary-foreground">
-          SaniMod Servicios
+          Servicios de Renta
         </h1>
         <p className="text-sm text-primary-foreground/70">Cargando sistema...</p>
       </div>

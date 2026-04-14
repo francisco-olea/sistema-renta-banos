@@ -1,37 +1,49 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useAppState } from "@/lib/app-context"
+import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
 import { FileBarChart, ShowerHead, Clock, Users } from "lucide-react"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
+
+function toNumber(value: unknown) {
+  const n = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(n) ? n : 0
+}
 
 function formatMXN(amount: number) {
-  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount)
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(toNumber(amount))
 }
 
 const CHART_COLORS = ["#059669", "#0284c7", "#d97706", "#dc2626", "#7c3aed"]
 
 export function ReportesSection() {
-  const { ordenes, pagos, registrosRuta, clientes } = useAppState()
+  const { ordenes, pagos, registrosRuta } = useAppState()
   const [activeReport, setActiveReport] = useState("renta-mensual")
-  const [selectedMonth, setSelectedMonth] = useState("2026-02")
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const [pagosPage, setPagosPage] = useState(1)
+  const pagosPageSize = 25
 
   // Reporte 1: Renta mensual
   const rentaMensual = useMemo(() => {
     const months: Record<string, number> = {}
     pagos.forEach((p) => {
       const month = p.fecha.substring(0, 7)
-      months[month] = (months[month] || 0) + p.monto
+      months[month] = (months[month] || 0) + toNumber(p.monto)
     })
     return Object.entries(months)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -42,11 +54,45 @@ export function ReportesSection() {
       }))
   }, [pagos])
 
+  const selectedMonthLabel = useMemo(() => {
+    if (!selectedMonth) return "Mes no seleccionado"
+    return new Date(`${selectedMonth}-01T00:00:00`).toLocaleDateString("es-MX", {
+      month: "long",
+      year: "numeric",
+    })
+  }, [selectedMonth])
+
   const totalRentaMes = useMemo(() => {
     return pagos
       .filter((p) => p.fecha.startsWith(selectedMonth))
-      .reduce((s, p) => s + p.monto, 0)
+      .reduce((s, p) => s + toNumber(p.monto), 0)
   }, [pagos, selectedMonth])
+
+  const pagosDelMes = useMemo(() => {
+    return pagos
+      .filter((p) => p.fecha.startsWith(selectedMonth))
+      .sort((a, b) => {
+        const byDate = (b.fecha || "").localeCompare(a.fecha || "")
+        return byDate !== 0 ? byDate : b.id - a.id
+      })
+  }, [pagos, selectedMonth])
+
+  const pagosPagesTotal = Math.max(1, Math.ceil(pagosDelMes.length / pagosPageSize))
+
+  const pagosDelMesPaginados = useMemo(() => {
+    const start = (pagosPage - 1) * pagosPageSize
+    return pagosDelMes.slice(start, start + pagosPageSize)
+  }, [pagosDelMes, pagosPage])
+
+  useEffect(() => {
+    setPagosPage(1)
+  }, [selectedMonth])
+
+  useEffect(() => {
+    if (pagosPage > pagosPagesTotal) {
+      setPagosPage(pagosPagesTotal)
+    }
+  }, [pagosPage, pagosPagesTotal])
 
   // Reporte 2: Banos limpiados
   const banosLimpiados = useMemo(() => {
@@ -96,13 +142,24 @@ export function ReportesSection() {
     ordenes.forEach((o) => {
       if (!byClient[o.cliente_nombre]) byClient[o.cliente_nombre] = { ordenes: 0, rentaTotal: 0, banosActivos: 0 }
       byClient[o.cliente_nombre].ordenes++
-      byClient[o.cliente_nombre].rentaTotal += o.renta
+      byClient[o.cliente_nombre].rentaTotal += toNumber(o.renta)
       if (o.estado === "activo") byClient[o.cliente_nombre].banosActivos += o.cantidad
     })
     return Object.entries(byClient)
       .map(([nombre, data]) => ({ nombre, ...data }))
       .sort((a, b) => b.rentaTotal - a.rentaTotal)
   }, [ordenes])
+
+  const mesesPagadosCliente = useMemo(() => {
+    const byClient: Record<string, number> = {}
+
+    pagos.forEach((p) => {
+      if (p.estatus !== "pagado") return
+      byClient[p.cliente_nombre] = (byClient[p.cliente_nombre] || 0) + 1
+    })
+
+    return byClient
+  }, [pagos])
 
   // Pie chart data for estados
   const estadosPie = useMemo(() => {
@@ -116,11 +173,121 @@ export function ReportesSection() {
     ]
   }, [ordenes])
 
+  const exportRentaMensualPdf = () => {
+    const doc = new jsPDF()
+    doc.setFontSize(14)
+    doc.text("Reporte: Renta Mensual", 14, 16)
+    doc.setFontSize(10)
+    doc.text(`Mes seleccionado: ${selectedMonthLabel}`, 14, 23)
+    doc.text(`Total del mes: ${formatMXN(totalRentaMes)}`, 14, 29)
+
+    autoTable(doc, {
+      startY: 35,
+      head: [["Mes", "Total"]],
+      body: rentaMensual.map((r) => [r.label, formatMXN(r.total)]),
+    })
+
+    autoTable(doc, {
+      startY: (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY
+        ? ((doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY as number) + 8
+        : 120,
+      head: [["Cliente", "Monto", "Metodo", "Estatus", "Fecha"]],
+      body: pagosDelMes.map((p) => [
+        p.cliente_nombre,
+        formatMXN(toNumber(p.monto)),
+        p.metodo,
+        p.estatus,
+        p.fecha || "-",
+      ]),
+    })
+
+    doc.save(`reporte-renta-mensual-${selectedMonth}.pdf`)
+  }
+
+  const exportLimpiezaPdf = () => {
+    const doc = new jsPDF()
+    doc.setFontSize(14)
+    doc.text("Reporte: Limpieza", 14, 16)
+    doc.setFontSize(10)
+    doc.text(`Total servicios completados: ${totalLimpiados}`, 14, 23)
+
+    autoTable(doc, {
+      startY: 30,
+      head: [["Ruta", "Completados", "Pendientes", "Total", "Tasa"]],
+      body: banosLimpiados.map((r) => [
+        r.ruta,
+        String(r.completados),
+        String(r.pendientes),
+        String(r.total),
+        `${r.total > 0 ? Math.round((r.completados / r.total) * 100) : 0}%`,
+      ]),
+    })
+
+    doc.save("reporte-limpieza.pdf")
+  }
+
+  const exportEfectividadPdf = () => {
+    const doc = new jsPDF()
+    doc.setFontSize(14)
+    doc.text("Reporte: Efectividad", 14, 16)
+
+    autoTable(doc, {
+      startY: 24,
+      head: [["Ruta", "Firmados", "Total", "Efectividad"]],
+      body: efectividadRuta.map((r) => [r.ruta, String(r.firmados), String(r.total), `${r.efectividad}%`]),
+    })
+
+    doc.save("reporte-efectividad.pdf")
+  }
+
+  const exportPorClientePdf = () => {
+    const doc = new jsPDF()
+    doc.setFontSize(14)
+    doc.text("Reporte: Por Cliente", 14, 16)
+
+    autoTable(doc, {
+      startY: 24,
+      head: [["Cliente", "Ordenes", "Renta Total", "Unidades Activas", "Meses pagados"]],
+      body: servicioCliente.map((c) => [
+        c.nombre,
+        String(c.ordenes),
+        formatMXN(c.rentaTotal),
+        String(c.banosActivos),
+        String(mesesPagadosCliente[c.nombre] || 0),
+      ]),
+    })
+
+    doc.save("reporte-por-cliente.pdf")
+  }
+
+  const handleDownloadPdf = () => {
+    if (activeReport === "renta-mensual") {
+      exportRentaMensualPdf()
+      return
+    }
+
+    if (activeReport === "banos-limpiados") {
+      exportLimpiezaPdf()
+      return
+    }
+
+    if (activeReport === "efectividad") {
+      exportEfectividadPdf()
+      return
+    }
+
+    exportPorClientePdf()
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground tracking-tight">Reportes</h2>
         <p className="text-sm text-muted-foreground mt-1">Analisis y reportes del negocio</p>
+      </div>
+
+      <div className="flex justify-end">
+        <Button variant="outline" onClick={handleDownloadPdf}>Descargar PDF</Button>
       </div>
 
       <Tabs value={activeReport} onValueChange={setActiveReport}>
@@ -146,19 +313,13 @@ export function ReportesSection() {
         {/* Renta Mensual */}
         <TabsContent value="renta-mensual" className="mt-4 flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="2026-02">Febrero 2026</SelectItem>
-                <SelectItem value="2026-01">Enero 2026</SelectItem>
-                <SelectItem value="2025-12">Diciembre 2025</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex flex-col gap-1.5 w-56">
+              <label className="text-xs font-medium text-muted-foreground">Mes del reporte</label>
+              <Input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} />
+            </div>
             <Card className="flex-1">
               <CardContent className="py-3 flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Total del mes</span>
+                <span className="text-sm text-muted-foreground">Total de {selectedMonthLabel}</span>
                 <span className="text-xl font-bold">{formatMXN(totalRentaMes)}</span>
               </CardContent>
             </Card>
@@ -202,17 +363,34 @@ export function ReportesSection() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pagos
-                      .filter((p) => p.fecha.startsWith(selectedMonth))
-                      .map((p) => (
+                      {pagosDelMesPaginados.map((p) => (
                         <TableRow key={p.id}>
                           <TableCell className="text-sm max-w-[140px] truncate">{p.cliente_nombre}</TableCell>
-                          <TableCell className="font-semibold">{formatMXN(p.monto)}</TableCell>
+                          <TableCell className="font-semibold">{formatMXN(toNumber(p.monto))}</TableCell>
                           <TableCell className="text-xs">{p.metodo}</TableCell>
                         </TableRow>
-                      ))}
+                        ))}
+                      {pagosDelMesPaginados.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center py-6 text-muted-foreground">No hay pagos en este mes</TableCell>
+                        </TableRow>
+                      )}
                   </TableBody>
                 </Table>
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                    <span className="text-xs text-muted-foreground">
+                      {pagosDelMes.length === 0 ? "0" : `${(pagosPage - 1) * pagosPageSize + 1}-${Math.min(pagosPage * pagosPageSize, pagosDelMes.length)}`} de {pagosDelMes.length}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" disabled={pagosPage <= 1} onClick={() => setPagosPage((p) => Math.max(1, p - 1))}>
+                        Anterior
+                      </Button>
+                      <span className="text-xs text-muted-foreground">Pag. {pagosPage} / {pagosPagesTotal}</span>
+                      <Button variant="outline" size="sm" disabled={pagosPage >= pagosPagesTotal} onClick={() => setPagosPage((p) => Math.min(pagosPagesTotal, p + 1))}>
+                        Siguiente
+                      </Button>
+                    </div>
+                  </div>
               </CardContent>
             </Card>
 
@@ -380,6 +558,7 @@ export function ReportesSection() {
                     <TableHead>Ordenes</TableHead>
                     <TableHead>Renta Total</TableHead>
                     <TableHead className="hidden sm:table-cell">Unidades Activas</TableHead>
+                    <TableHead className="hidden lg:table-cell">Meses pagados</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -390,6 +569,9 @@ export function ReportesSection() {
                       <TableCell className="font-semibold">{formatMXN(c.rentaTotal)}</TableCell>
                       <TableCell className="hidden sm:table-cell">
                         <Badge variant="outline">{c.banosActivos}</Badge>
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <Badge variant="secondary">{mesesPagadosCliente[c.nombre] || 0}</Badge>
                       </TableCell>
                     </TableRow>
                   ))}

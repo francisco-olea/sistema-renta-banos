@@ -9,7 +9,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog"
 import { Plus, Pencil, Search, Phone, Mail, Building2 } from "lucide-react"
 import type { Cliente } from "@/lib/data"
@@ -162,6 +162,9 @@ export function ClientesSection() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{newCliente ? "Nuevo Cliente" : `Editar Cliente #${editCliente?.id}`}</DialogTitle>
+            <DialogDescription>
+              Completa los datos de contacto y domicilio del cliente.
+            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">

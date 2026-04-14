@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
+import dynamic from "next/dynamic"
 import { useAppState } from "@/lib/app-context"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,15 +9,25 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select"
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Eye, Image, CheckCircle2, Clock, Loader2 } from "lucide-react"
+import { Eye, Image, CheckCircle2, Clock, Loader2, Plus, Trash2, ArrowDown, RefreshCcw } from "lucide-react"
 import { diasSemana, type RegistroRuta, type EstatusRuta } from "@/lib/data"
+
+const RutaMap = dynamic(() => import("@/components/ruta-map"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[420px] w-full rounded-xl bg-muted flex items-center justify-center text-muted-foreground text-sm">
+      Cargando mapa...
+    </div>
+  ),
+})
 
 function estatusBadge(estatus: EstatusRuta) {
   switch (estatus) {
@@ -30,28 +41,90 @@ function estatusBadge(estatus: EstatusRuta) {
 }
 
 export function RutasSection() {
-  const { registrosRuta } = useAppState()
+  const { registrosRuta, rutas, addRuta, deleteRuta, refreshRutasFromOrdenes } = useAppState()
+  const [orderedRegistros, setOrderedRegistros] = useState<RegistroRuta[]>(registrosRuta)
   const [selectedDay, setSelectedDay] = useState("Lunes")
-  const [filterRuta, setFilterRuta] = useState<string>("todas")
+  const [filterRuta, setFilterRuta] = useState<string>("1")
   const [detailRecord, setDetailRecord] = useState<RegistroRuta | null>(null)
+  const [confirmAdd, setConfirmAdd] = useState(false)
+  const [rutaToDelete, setRutaToDelete] = useState<number | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [justUpdated, setJustUpdated] = useState(false)
+
+  const handleRefresh = () => {
+    if (isRefreshing) return
+
+    setIsRefreshing(true)
+    refreshRutasFromOrdenes()
+
+    window.setTimeout(() => {
+      setIsRefreshing(false)
+      setJustUpdated(true)
+      window.setTimeout(() => setJustUpdated(false), 1100)
+    }, 320)
+  }
+
+  useEffect(() => {
+    if (rutas.length === 0) return
+    if (!rutas.includes(Number(filterRuta))) {
+      setFilterRuta(rutas.includes(1) ? "1" : String(rutas[0]))
+    }
+  }, [rutas, filterRuta])
+
+  useEffect(() => {
+    setOrderedRegistros((prev) => {
+      const fromContextById = new Map(registrosRuta.map((r) => [r.id, r]))
+
+      // Preserve local visual order, but refresh each row with latest context data.
+      const merged = prev
+        .filter((r) => fromContextById.has(r.id))
+        .map((r) => fromContextById.get(r.id) as RegistroRuta)
+
+      const knownIds = new Set(merged.map((r) => r.id))
+      const nuevos = registrosRuta.filter((r) => !knownIds.has(r.id))
+      return [...merged, ...nuevos]
+    })
+  }, [registrosRuta])
 
   const filtered = useMemo(() => {
-    return registrosRuta.filter((r) => {
+    return orderedRegistros.filter((r) => {
       if (r.dia !== selectedDay) return false
-      if (filterRuta !== "todas" && r.ruta !== Number(filterRuta)) return false
+      if (r.ruta !== Number(filterRuta)) return false
       return true
     })
-  }, [registrosRuta, selectedDay, filterRuta])
+  }, [orderedRegistros, selectedDay, filterRuta])
 
   const dayStats = useMemo(() => {
-    const dayRecords = registrosRuta.filter((r) => r.dia === selectedDay)
+    const dayRecords = orderedRegistros.filter((r) => r.dia === selectedDay)
     return {
       total: dayRecords.length,
       completados: dayRecords.filter((r) => r.estatus === "completado").length,
       enProceso: dayRecords.filter((r) => r.estatus === "en_proceso").length,
       pendientes: dayRecords.filter((r) => r.estatus === "pendiente").length,
     }
-  }, [registrosRuta, selectedDay])
+  }, [orderedRegistros, selectedDay])
+
+  const moveRecordDown = (recordId: number) => {
+    setOrderedRegistros((prev) => {
+      const currentIndex = prev.findIndex((r) => r.id === recordId)
+      if (currentIndex === -1) return prev
+
+      const nextIndex = prev.findIndex((r, idx) => {
+        if (idx <= currentIndex) return false
+        if (r.dia !== selectedDay) return false
+        if (r.ruta !== Number(filterRuta)) return false
+        return true
+      })
+
+      if (nextIndex === -1) return prev
+
+      const next = [...prev]
+      const temp = next[currentIndex]
+      next[currentIndex] = next[nextIndex]
+      next[nextIndex] = temp
+      return next
+    })
+  }
 
   const evidenceCount = (r: RegistroRuta) => {
     return [r.evidencia1, r.evidencia2, r.evidencia3, r.evidencia4, r.evidencia5].filter(Boolean).length
@@ -63,6 +136,58 @@ export function RutasSection() {
         <h2 className="text-2xl font-bold text-foreground tracking-tight">Rutas</h2>
         <p className="text-sm text-muted-foreground mt-1">Registro de servicio de limpieza por dia</p>
       </div>
+
+      {/* Route filter buttons */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="secondary"
+          onClick={handleRefresh}
+          className={
+            `rounded-full transition-all duration-200 active:scale-95 ${
+              justUpdated
+                ? "bg-emerald-600/15 text-emerald-700 border border-emerald-300 shadow-sm"
+                : "hover:-translate-y-0.5 hover:shadow-md"
+            }`
+          }
+        >
+          <RefreshCcw className={`h-4 w-4 mr-1.5 ${isRefreshing ? "animate-spin" : justUpdated ? "animate-pulse" : ""}`} />
+          {isRefreshing ? "Actualizando..." : justUpdated ? "Actualizado" : "Actualizar"}
+        </Button>
+        {rutas.map((r) => (
+          <Button
+            key={r}
+            variant={filterRuta === String(r) ? "default" : "outline"}
+            onClick={() => setFilterRuta(String(r))}
+            className="rounded-full"
+          >
+            Ruta {r}
+          </Button>
+        ))}
+        <Button
+          variant="outline"
+          onClick={() => setConfirmAdd(true)}
+          className="rounded-full border-dashed"
+        >
+          <Plus className="h-4 w-4 mr-1.5" />
+          Agregar Ruta
+        </Button>
+      </div>
+
+      {/* Map */}
+      <Card className="overflow-hidden">
+        <CardHeader className="pb-3 pt-4 px-4">
+          <CardTitle className="text-sm font-semibold">
+            Ubicaciones de clientes
+            <span className="ml-2 text-muted-foreground font-normal">— Ruta {filterRuta}</span>
+            <span className="ml-2 text-muted-foreground font-normal text-xs">
+              ({filtered.length} {filtered.length === 1 ? "cliente" : "clientes"} — {selectedDay})
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <RutaMap records={filtered} />
+        </CardContent>
+      </Card>
 
       {/* Day tabs */}
       <Tabs value={selectedDay} onValueChange={setSelectedDay}>
@@ -113,29 +238,13 @@ export function RutasSection() {
               </Card>
             </div>
 
-            {/* Filter by route */}
-            <div className="flex items-center gap-3">
-              <Select value={filterRuta} onValueChange={setFilterRuta}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Filtrar ruta" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todas">Todas las rutas</SelectItem>
-                  <SelectItem value="1">Ruta 1</SelectItem>
-                  <SelectItem value="2">Ruta 2</SelectItem>
-                  <SelectItem value="3">Ruta 3</SelectItem>
-                  <SelectItem value="4">Ruta 4</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             {/* Table */}
             <Card>
               <CardContent className="p-0">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
+                      <TableHead>Orden</TableHead>
                       <TableHead>Cliente</TableHead>
                       <TableHead className="hidden md:table-cell">Ubicacion</TableHead>
                       <TableHead className="hidden lg:table-cell">Notas</TableHead>
@@ -155,9 +264,21 @@ export function RutasSection() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filtered.map((r) => (
+                      filtered.map((r, idx) => (
                         <TableRow key={r.id}>
-                          <TableCell className="font-mono text-xs">{r.id}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs text-muted-foreground">{idx + 1}</span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => moveRecordDown(r.id)}
+                                aria-label={`Mover ${r.cliente} hacia abajo`}
+                              >
+                                <ArrowDown className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
                           <TableCell className="font-medium max-w-[150px] truncate">{r.cliente}</TableCell>
                           <TableCell className="hidden md:table-cell text-xs max-w-[150px] truncate">{r.ubicacion}</TableCell>
                           <TableCell className="hidden lg:table-cell text-xs text-muted-foreground max-w-[120px] truncate">{r.notas || "-"}</TableCell>
@@ -189,6 +310,16 @@ export function RutasSection() {
                 </Table>
               </CardContent>
             </Card>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setRutaToDelete(Number(filterRuta))}
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+              >
+                <Trash2 className="h-4 w-4" />
+                Eliminar Ruta {filterRuta}
+              </button>
+            </div>
           </TabsContent>
         ))}
       </Tabs>
@@ -198,6 +329,9 @@ export function RutasSection() {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Detalle de Servicio #{detailRecord?.id}</DialogTitle>
+            <DialogDescription>
+              Consulta la informacion del servicio, evidencias y datos de firma.
+            </DialogDescription>
           </DialogHeader>
           {detailRecord && (
             <div className="flex flex-col gap-4">
@@ -261,6 +395,57 @@ export function RutasSection() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Confirm add route */}
+      <AlertDialog open={confirmAdd} onOpenChange={setConfirmAdd}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Agregar nueva ruta?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se creará la <strong>Ruta {rutas.length > 0 ? Math.max(...rutas) + 1 : 1}</strong>. Podrás asignarle clientes y registros de servicio.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { addRuta(); setConfirmAdd(false) }}>
+              Agregar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm delete route */}
+      <AlertDialog open={rutaToDelete !== null} onOpenChange={(open) => !open && setRutaToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">¿Eliminar Ruta {rutaToDelete}?</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-muted-foreground">
+              Esta acción eliminará la Ruta {rutaToDelete} de la lista.
+            </AlertDialogDescription>
+            <AlertDialogDescription className="text-sm text-muted-foreground">
+              Los registros existentes con esta ruta no serán afectados y esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (rutaToDelete !== null) {
+                  const nextRoutes = rutas.filter((r) => r !== rutaToDelete)
+                  deleteRuta(rutaToDelete)
+                  if (filterRuta === String(rutaToDelete)) {
+                    setFilterRuta(nextRoutes.includes(1) ? "1" : String(nextRoutes[0] ?? 1))
+                  }
+                  setRutaToDelete(null)
+                }
+              }}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

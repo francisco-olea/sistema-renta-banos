@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import dynamic from "next/dynamic"
 import { useAppState } from "@/lib/app-context"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -13,10 +14,22 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog"
 import { Plus, Pencil, Search } from "lucide-react"
 import type { Orden, EstadoOrden, RutaNum, Frecuencia, TipoOrden } from "@/lib/data"
+
+const MapLocationPicker = dynamic(
+  () => import("@/components/map-location-picker").then((mod) => mod.MapLocationPicker),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-64 w-full rounded-lg border border-border bg-muted flex items-center justify-center text-sm text-muted-foreground">
+        Cargando mapa...
+      </div>
+    ),
+  }
+)
 
 const weekDays = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"] as const
 
@@ -52,7 +65,12 @@ function estadoBadge(estado: EstadoOrden) {
 }
 
 function formatMXN(amount: number) {
-  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount)
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount)
 }
 
 const emptyOrden: Omit<Orden, "id" | "created_at" | "updated_at"> = {
@@ -66,28 +84,35 @@ const emptyOrden: Omit<Orden, "id" | "created_at" | "updated_at"> = {
   ruta: 1,
   frecuencia: "Lunes",
   domicilio: "",
+  map_lat: null,
+  map_lng: null,
   fecha_inicio: new Date().toISOString().split("T")[0],
   fecha_fin: null,
   notas: "",
 }
 
 export function OrdenesSection() {
-  const { ordenes, updateOrden, addOrden, clientes, productos } = useAppState()
+  const { ordenes, updateOrden, addOrden, clientes, productos, rutas } = useAppState()
   const [search, setSearch] = useState("")
+  const [filterRuta, setFilterRuta] = useState<string>("todas")
+  const [filterEstado, setFilterEstado] = useState<string>("todos")
   const [editOrder, setEditOrder] = useState<Orden | null>(null)
   const [newOrder, setNewOrder] = useState(false)
   const [form, setForm] = useState<Partial<Orden>>(emptyOrden)
 
   const filtered = useMemo(() => {
-    if (!search) return ordenes
-    const s = search.toLowerCase()
-    return ordenes.filter(
-      (o) =>
+    return ordenes.filter((o) => {
+      if (filterRuta !== "todas" && o.ruta !== Number(filterRuta)) return false
+      if (filterEstado !== "todos" && o.estado !== filterEstado) return false
+      if (!search) return true
+      const s = search.toLowerCase()
+      return (
         o.cliente_nombre.toLowerCase().includes(s) ||
         String(o.id).includes(s) ||
         o.domicilio.toLowerCase().includes(s)
-    )
-  }, [ordenes, search])
+      )
+    }).sort((a, b) => b.id - a.id)
+  }, [ordenes, search, filterRuta, filterEstado])
 
   const openNew = () => {
     setNewOrder(true)
@@ -98,7 +123,7 @@ export function OrdenesSection() {
   const openEdit = (o: Orden) => {
     setEditOrder(o)
     setNewOrder(false)
-    setForm({ ...o })
+    setForm({ ...o, map_lat: o.map_lat ?? null, map_lng: o.map_lng ?? null })
   }
 
   const save = () => {
@@ -143,9 +168,33 @@ export function OrdenesSection() {
 
       <Card>
         <CardContent className="pt-6">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar por ID, cliente o domicilio..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Buscar por ID, cliente o domicilio..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+            </div>
+            <Select value={filterEstado} onValueChange={setFilterEstado}>
+              <SelectTrigger className="w-full sm:w-44">
+                <SelectValue placeholder="Estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="activo">Activo</SelectItem>
+                <SelectItem value="terminado">Terminado</SelectItem>
+                <SelectItem value="cancelado">Cancelado</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterRuta} onValueChange={setFilterRuta}>
+              <SelectTrigger className="w-full sm:w-44">
+                <SelectValue placeholder="Filtrar por ruta" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas las rutas</SelectItem>
+                {rutas.map((r) => (
+                  <SelectItem key={r} value={String(r)}>Ruta {r}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -203,6 +252,9 @@ export function OrdenesSection() {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{newOrder ? "Nueva Orden" : `Editar Orden #${editOrder?.id}`}</DialogTitle>
+            <DialogDescription>
+              Completa o actualiza la informacion de la orden, incluyendo cliente, ruta, frecuencia y ubicacion en mapa.
+            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -247,7 +299,7 @@ export function OrdenesSection() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Renta (MXN)</label>
-                <Input type="number" value={form.renta ?? ""} onChange={(e) => setForm({ ...form, renta: Number(e.target.value) })} />
+                <Input type="number" step="1" value={form.renta ?? ""} onChange={(e) => setForm({ ...form, renta: Number(e.target.value) })} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Producto</label>
@@ -269,10 +321,9 @@ export function OrdenesSection() {
                 <Select value={String(form.ruta)} onValueChange={(v) => setForm({ ...form, ruta: Number(v) as RutaNum })}>
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">Ruta 1</SelectItem>
-                    <SelectItem value="2">Ruta 2</SelectItem>
-                    <SelectItem value="3">Ruta 3</SelectItem>
-                    <SelectItem value="4">Ruta 4</SelectItem>
+                    {rutas.map((r) => (
+                      <SelectItem key={r} value={String(r)}>Ruta {r}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -306,6 +357,32 @@ export function OrdenesSection() {
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">Domicilio</label>
               <Input value={form.domicilio ?? ""} onChange={(e) => setForm({ ...form, domicilio: e.target.value })} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-sm font-medium">Ubicacion en mapa</label>
+                {(form.map_lat != null && form.map_lng != null) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setForm({ ...form, map_lat: null, map_lng: null })}
+                  >
+                    Limpiar pin
+                  </Button>
+                )}
+              </div>
+              <MapLocationPicker
+                lat={form.map_lat ?? null}
+                lng={form.map_lng ?? null}
+                onChange={(lat, lng) => setForm({ ...form, map_lat: lat, map_lng: lng })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Haz clic en el mapa para colocar el pin de la ubicacion asignada.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Lat: {form.map_lat != null ? form.map_lat.toFixed(6) : "-"} | Lng: {form.map_lng != null ? form.map_lng.toFixed(6) : "-"}
+              </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">

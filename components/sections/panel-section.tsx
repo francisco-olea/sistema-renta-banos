@@ -26,6 +26,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
 import {
@@ -51,11 +52,16 @@ function estadoBadge(estado: EstadoOrden) {
 }
 
 function formatMXN(amount: number) {
-  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount)
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount)
 }
 
 export function PanelSection() {
-  const { ordenes, updateOrden, clientes, productos } = useAppState()
+  const { ordenes, updateOrden, clientes, productos, rutas } = useAppState()
   const [filterCliente, setFilterCliente] = useState("")
   const [filterEstado, setFilterEstado] = useState<string>("todos")
   const [filterRuta, setFilterRuta] = useState<string>("todas")
@@ -78,10 +84,11 @@ export function PanelSection() {
   }, [sorted, filterCliente, filterEstado, filterRuta, filterDomicilio])
 
   const stats = useMemo(() => {
-    const activos = ordenes.filter((o) => o.estado === "activo").length
+    const ordenesActivas = ordenes.filter((o) => o.estado === "activo")
+    const activos = ordenesActivas.length
     const terminados = ordenes.filter((o) => o.estado === "terminado").length
     const cancelados = ordenes.filter((o) => o.estado === "cancelado").length
-    const totalRenta = ordenes.filter((o) => o.estado === "activo").reduce((s, o) => s + o.renta, 0)
+    const totalRenta = ordenesActivas.reduce((sum, orden) => sum + Number(orden.renta || 0), 0)
     return { activos, terminados, cancelados, totalRenta }
   }, [ordenes])
 
@@ -184,10 +191,9 @@ export function PanelSection() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todas">Todas las rutas</SelectItem>
-                  <SelectItem value="1">Ruta 1</SelectItem>
-                  <SelectItem value="2">Ruta 2</SelectItem>
-                  <SelectItem value="3">Ruta 3</SelectItem>
-                  <SelectItem value="4">Ruta 4</SelectItem>
+                  {rutas.map((ruta) => (
+                    <SelectItem key={ruta} value={String(ruta)}>Ruta {ruta}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <div className="relative">
@@ -272,6 +278,9 @@ export function PanelSection() {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Editar Orden #{editOrder?.id}</DialogTitle>
+            <DialogDescription>
+              Modifica cliente, estado, ruta, producto y fechas de la orden seleccionada.
+            </DialogDescription>
           </DialogHeader>
           {editForm && (
             <div className="flex flex-col gap-4">
@@ -339,10 +348,9 @@ export function PanelSection() {
                   <Select value={String(editForm.ruta)} onValueChange={(v) => setEditForm({ ...editForm, ruta: Number(v) as RutaNum })}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="1">Ruta 1</SelectItem>
-                      <SelectItem value="2">Ruta 2</SelectItem>
-                      <SelectItem value="3">Ruta 3</SelectItem>
-                      <SelectItem value="4">Ruta 4</SelectItem>
+                      {rutas.map((ruta) => (
+                        <SelectItem key={ruta} value={String(ruta)}>Ruta {ruta}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

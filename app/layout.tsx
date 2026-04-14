@@ -9,7 +9,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'SaniMod - Gestion de Renta de Banos Portátiles',
+  title: 'Servicios de Renta - Gestion de Renta de Banos Portátiles',
   description: 'Sistema de gestion de renta de banos portátiles. Controla ordenes, rutas, pagos, clientes y reportes.',
   generator: 'v0.app',
   icons: {
