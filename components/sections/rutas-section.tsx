@@ -29,19 +29,29 @@ const RutaMap = dynamic(() => import("@/components/ruta-map"), {
   ),
 })
 
-function estatusBadge(estatus: EstatusRuta) {
-  switch (estatus) {
+function estatusBadge(estatus: EstatusRuta | string) {
+  const statusStr = String(estatus).toLowerCase()
+  switch (statusStr) {
     case "completado":
-      return <Badge className="bg-status-listo/15 text-status-listo border-status-listo/25 hover:bg-status-listo/15"><CheckCircle2 className="h-3 w-3 mr-1" />Completado</Badge>
+    case "listo":
+      return <Badge className="bg-status-listo/15 text-status-listo border-status-listo/25 hover:bg-status-listo/15"><CheckCircle2 className="h-3 w-3 mr-1" />Listo</Badge>
     case "en_proceso":
       return <Badge className="bg-chart-4/15 text-chart-4 border-chart-4/25 hover:bg-chart-4/15"><Loader2 className="h-3 w-3 mr-1" />En proceso</Badge>
+    case "cerrado":
+      return <Badge className="bg-status-cerrado/15 text-status-cerrado border-status-cerrado/25 hover:bg-status-cerrado/15"><CheckCircle2 className="h-3 w-3 mr-1" />Cerrado</Badge>
+    case "material estorbando":
+    case "material_estorbando":
+      return <Badge className="bg-status-cerrado/15 text-status-cerrado border-status-cerrado/25 hover:bg-status-cerrado/15"><CheckCircle2 className="h-3 w-3 mr-1" />Material Estorbando</Badge>
+    case "notas":
+      return <Badge className="bg-violet-500/15 text-violet-700 border-violet-400/30 hover:bg-violet-500/15"><Clock className="h-3 w-3 mr-1" />Notas</Badge>
     case "pendiente":
-      return <Badge className="bg-muted text-muted-foreground border-border hover:bg-muted"><Clock className="h-3 w-3 mr-1" />Pendiente</Badge>
+    default:
+      return <Badge className="bg-muted text-muted-foreground border-border hover:bg-muted"><Clock className="h-3 w-3 mr-1" />{statusStr === "pendiente" ? "Pendiente" : estatus}</Badge>
   }
 }
 
 export function RutasSection() {
-  const { registrosRuta, rutas, addRuta, deleteRuta, refreshRutasFromOrdenes } = useAppState()
+  const { registrosRuta, rutas, addRuta, deleteRuta, refreshRutasFromOrdenes, syncFromDatabase } = useAppState()
   const [orderedRegistros, setOrderedRegistros] = useState<RegistroRuta[]>(registrosRuta)
   const [selectedDay, setSelectedDay] = useState("Lunes")
   const [filterRuta, setFilterRuta] = useState<string>("1")
@@ -50,6 +60,8 @@ export function RutasSection() {
   const [rutaToDelete, setRutaToDelete] = useState<number | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [justUpdated, setJustUpdated] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const isBaseRoute = Number(filterRuta) <= 5
 
   const handleRefresh = () => {
     if (isRefreshing) return
@@ -62,6 +74,14 @@ export function RutasSection() {
       setJustUpdated(true)
       window.setTimeout(() => setJustUpdated(false), 1100)
     }, 320)
+  }
+
+  const handleSync = async () => {
+    if (isSyncing) return
+
+    setIsSyncing(true)
+    await syncFromDatabase()
+    setIsSyncing(false)
   }
 
   useEffect(() => {
@@ -140,18 +160,14 @@ export function RutasSection() {
       {/* Route filter buttons */}
       <div className="flex flex-wrap items-center gap-2">
         <Button
-          variant="secondary"
-          onClick={handleRefresh}
-          className={
-            `rounded-full transition-all duration-200 active:scale-95 ${
-              justUpdated
-                ? "bg-emerald-600/15 text-emerald-700 border border-emerald-300 shadow-sm"
-                : "hover:-translate-y-0.5 hover:shadow-md"
-            }`
-          }
+          variant="outline"
+          onClick={handleSync}
+          disabled={isSyncing}
+          className="rounded-full"
+          title="Sincronizar datos desde la base de datos"
         >
-          <RefreshCcw className={`h-4 w-4 mr-1.5 ${isRefreshing ? "animate-spin" : justUpdated ? "animate-pulse" : ""}`} />
-          {isRefreshing ? "Actualizando..." : justUpdated ? "Actualizado" : "Actualizar"}
+          <RefreshCcw className={`h-4 w-4 mr-1.5 ${isSyncing ? "animate-spin" : ""}`} />
+          {isSyncing ? "Sincronizando..." : "Sincronizar"}
         </Button>
         {rutas.map((r) => (
           <Button
@@ -167,6 +183,8 @@ export function RutasSection() {
           variant="outline"
           onClick={() => setConfirmAdd(true)}
           className="rounded-full border-dashed"
+          disabled
+          title="La app tiene 5 rutas habilitadas por defecto. Este botón se habilita cuando se requieran más rutas."
         >
           <Plus className="h-4 w-4 mr-1.5" />
           Agregar Ruta
@@ -314,10 +332,11 @@ export function RutasSection() {
             <div className="flex justify-end">
               <button
                 onClick={() => setRutaToDelete(Number(filterRuta))}
+                disabled={isBaseRoute}
                 className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
               >
                 <Trash2 className="h-4 w-4" />
-                Eliminar Ruta {filterRuta}
+                {isBaseRoute ? `Ruta ${filterRuta} fija` : `Eliminar Ruta ${filterRuta}`}
               </button>
             </div>
           </TabsContent>
@@ -361,15 +380,20 @@ export function RutasSection() {
               <div>
                 <p className="text-sm font-medium mb-2">Evidencias ({evidenceCount(detailRecord)}/5)</p>
                 <div className="grid grid-cols-5 gap-2">
-                  {[detailRecord.evidencia1, detailRecord.evidencia2, detailRecord.evidencia3, detailRecord.evidencia4, detailRecord.evidencia5].map((ev, i) => (
-                    <div key={i} className="aspect-square rounded-lg border border-border bg-muted flex items-center justify-center">
-                      {ev ? (
-                        <Image className="h-5 w-5 text-muted-foreground" />
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground">N/A</span>
-                      )}
-                    </div>
-                  ))}
+                  {[detailRecord.evidencia1, detailRecord.evidencia2, detailRecord.evidencia3, detailRecord.evidencia4, detailRecord.evidencia5].map((ev, i) => {
+                    const isBase64 = ev && typeof ev === 'string' && ev.startsWith('data:image')
+                    return (
+                      <div key={i} className="aspect-square rounded-lg border border-border bg-muted flex items-center justify-center overflow-hidden">
+                        {isBase64 ? (
+                          <img src={ev as string} alt={`Evidencia ${i + 1}`} className="w-full h-full object-cover" />
+                        ) : ev ? (
+                          <Image className="h-5 w-5 text-muted-foreground" />
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground text-center px-1">No</span>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
@@ -402,7 +426,7 @@ export function RutasSection() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Agregar nueva ruta?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se creará la <strong>Ruta {rutas.length > 0 ? Math.max(...rutas) + 1 : 1}</strong>. Podrás asignarle clientes y registros de servicio.
+              La app mantiene <strong>5 rutas habilitadas por defecto</strong>. Cuando el cliente requiera más rutas, este botón podrá habilitarse para crear la siguiente ruta disponible.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -432,6 +456,11 @@ export function RutasSection() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
                 if (rutaToDelete !== null) {
+                  if (rutaToDelete <= 5) {
+                    setRutaToDelete(null)
+                    return
+                  }
+
                   const nextRoutes = rutas.filter((r) => r !== rutaToDelete)
                   deleteRuta(rutaToDelete)
                   if (filterRuta === String(rutaToDelete)) {

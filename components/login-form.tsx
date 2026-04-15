@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useAuth } from "@/lib/auth-context"
+import { useAppState } from "@/lib/app-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -10,6 +11,7 @@ import { LoadingScreen } from "@/components/loading-screen"
 
 export function LoginForm() {
   const { login } = useAuth()
+  const { syncFromDatabase } = useAppState()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
@@ -32,8 +34,9 @@ export function LoginForm() {
     }
   }
 
-  const handleLoadingFinish = () => {
-    // Autenticar al usuario después del loading
+  const handleLoadingFinish = async () => {
+    // Sincroniza toda la app con BD antes de autenticar.
+    await syncFromDatabase()
     login(username, password)
   }
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import dynamic from "next/dynamic"
 import { useAppState } from "@/lib/app-context"
 import { Input } from "@/components/ui/input"
@@ -16,7 +16,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Pencil, Search } from "lucide-react"
+import { Plus, Pencil, Search, RefreshCcw } from "lucide-react"
 import type { Orden, EstadoOrden, RutaNum, Frecuencia, TipoOrden } from "@/lib/data"
 
 const MapLocationPicker = dynamic(
@@ -73,6 +73,11 @@ function formatMXN(amount: number) {
   }).format(amount)
 }
 
+function formatCoordinate(value: unknown) {
+  const numericValue = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(numericValue) ? numericValue.toFixed(6) : "-"
+}
+
 const emptyOrden: Omit<Orden, "id" | "created_at" | "updated_at"> = {
   cliente_id: 0,
   cliente_nombre: "",
@@ -92,13 +97,17 @@ const emptyOrden: Omit<Orden, "id" | "created_at" | "updated_at"> = {
 }
 
 export function OrdenesSection() {
-  const { ordenes, updateOrden, addOrden, clientes, productos, rutas } = useAppState()
+  const { ordenes, updateOrden, addOrden, clientes, productos, rutas, refreshRutasFromOrdenes } = useAppState()
   const [search, setSearch] = useState("")
   const [filterRuta, setFilterRuta] = useState<string>("todas")
   const [filterEstado, setFilterEstado] = useState<string>("todos")
   const [editOrder, setEditOrder] = useState<Orden | null>(null)
   const [newOrder, setNewOrder] = useState(false)
   const [form, setForm] = useState<Partial<Orden>>(emptyOrden)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [justUpdated, setJustUpdated] = useState(false)
+
+  const rutasDisponibles = useMemo(() => Array.from(new Set(rutas)).sort((a, b) => a - b), [rutas])
 
   const filtered = useMemo(() => {
     return ordenes.filter((o) => {
@@ -117,7 +126,7 @@ export function OrdenesSection() {
   const openNew = () => {
     setNewOrder(true)
     setEditOrder(null)
-    setForm({ ...emptyOrden })
+    setForm({ ...emptyOrden, ruta: (rutasDisponibles[0] ?? 1) as RutaNum })
   }
 
   const openEdit = (o: Orden) => {
@@ -141,6 +150,37 @@ export function OrdenesSection() {
     setNewOrder(false)
   }
 
+  const isOpen = !!editOrder || newOrder
+
+  const handleRefresh = () => {
+    if (isRefreshing) return
+
+    setIsRefreshing(true)
+    refreshRutasFromOrdenes()
+
+    window.setTimeout(() => {
+      setIsRefreshing(false)
+      setJustUpdated(true)
+      window.setTimeout(() => setJustUpdated(false), 1100)
+    }, 320)
+  }
+
+  useEffect(() => {
+    if (filterRuta !== "todas" && !rutasDisponibles.includes(Number(filterRuta))) {
+      setFilterRuta("todas")
+    }
+  }, [filterRuta, rutasDisponibles])
+
+  useEffect(() => {
+    if (!isOpen) return
+    if (rutasDisponibles.length === 0) return
+
+    const rutaActual = Number(form.ruta ?? rutasDisponibles[0] ?? 1)
+    if (!rutasDisponibles.includes(rutaActual)) {
+      setForm((prev) => ({ ...prev, ruta: (rutasDisponibles[0] ?? 1) as RutaNum }))
+    }
+  }, [form.ruta, isOpen, rutasDisponibles])
+
   const selectedDays = parseFrecuencia(form.frecuencia)
 
   const toggleFrequencyDay = (day: string) => {
@@ -150,8 +190,6 @@ export function OrdenesSection() {
 
     setForm({ ...form, frecuencia: formatFrecuencia(nextDays) as Frecuencia })
   }
-
-  const isOpen = !!editOrder || newOrder
 
   return (
     <div className="flex flex-col gap-6">
@@ -190,11 +228,26 @@ export function OrdenesSection() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todas">Todas las rutas</SelectItem>
-                {rutas.map((r) => (
+                {rutasDisponibles.map((r) => (
                   <SelectItem key={r} value={String(r)}>Ruta {r}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleRefresh}
+              className={
+                `transition-all duration-200 active:scale-95 sm:self-start ${
+                  justUpdated
+                    ? "bg-emerald-600/15 text-emerald-700 border border-emerald-300 shadow-sm"
+                    : "hover:-translate-y-0.5 hover:shadow-md"
+                }`
+              }
+            >
+              <RefreshCcw className={`h-4 w-4 mr-1.5 ${isRefreshing ? "animate-spin" : justUpdated ? "animate-pulse" : ""}`} />
+              {isRefreshing ? "Actualizando..." : justUpdated ? "Actualizado" : "Actualizar"}
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -321,7 +374,7 @@ export function OrdenesSection() {
                 <Select value={String(form.ruta)} onValueChange={(v) => setForm({ ...form, ruta: Number(v) as RutaNum })}>
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {rutas.map((r) => (
+                    {rutasDisponibles.map((r) => (
                       <SelectItem key={r} value={String(r)}>Ruta {r}</SelectItem>
                     ))}
                   </SelectContent>
@@ -381,7 +434,7 @@ export function OrdenesSection() {
                 Haz clic en el mapa para colocar el pin de la ubicacion asignada.
               </p>
               <p className="text-xs text-muted-foreground">
-                Lat: {form.map_lat != null ? form.map_lat.toFixed(6) : "-"} | Lng: {form.map_lng != null ? form.map_lng.toFixed(6) : "-"}
+                Lat: {formatCoordinate(form.map_lat)} | Lng: {formatCoordinate(form.map_lng)}
               </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

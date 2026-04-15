@@ -4,6 +4,8 @@ import { diasSemana, type Frecuencia } from "@/lib/data"
 
 export const runtime = "nodejs"
 
+const BASE_RUTAS = [1, 2, 3, 4, 5] as const
+
 type Entity = "clientes" | "productos" | "ordenes" | "pagos"
 
 function normalizeText(value: string) {
@@ -102,6 +104,7 @@ async function getAllState() {
 
   const rutas = Array.from(
     new Set([
+      ...BASE_RUTAS,
       ...ordenesRes.rows.map((o) => Number(o.ruta)),
       ...registrosRutaRes.rows.map((r) => Number(r.ruta)),
     ])
@@ -113,7 +116,7 @@ async function getAllState() {
     ordenes: ordenesRes.rows,
     pagos: pagosRes.rows,
     registrosRuta: registrosRutaRes.rows,
-    rutas: rutas.length > 0 ? rutas : [1],
+    rutas,
   }
 }
 

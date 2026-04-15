@@ -5,7 +5,7 @@ export type TipoOrden = "Obra" | "Evento" | "Otro"
 export type Producto = "Bano" | "Lavamanos"
 export type RutaNum = 1 | 2 | 3 | 4
 export type Frecuencia = string
-export type EstatusRuta = "pendiente" | "en_proceso" | "completado"
+export type EstatusRuta = "pendiente" | "en_proceso" | "completado" | "cerrado" | string
 
 export interface Orden {
   id: number

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react"
 import {
   ordenesData as initialOrdenes,
   clientesData as initialClientes,
@@ -39,6 +39,7 @@ interface AppState {
   rutas: number[]
   isLoading: boolean
   refreshRutasFromOrdenes: () => void
+  syncFromDatabase: () => Promise<void>
   updateOrden: (id: number, data: Partial<Orden>) => void
   addOrden: (data: Omit<Orden, "id" | "created_at" | "updated_at">) => void
   addCliente: (data: Omit<Cliente, "id" | "created_at">) => void
@@ -55,6 +56,7 @@ interface AppState {
 }
 
 const AppContext = createContext<AppState | null>(null)
+const BASE_RUTAS = [1, 2, 3, 4, 5] as const
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [ordenes, setOrdenes] = useState<Orden[]>(initialOrdenes)
@@ -62,8 +64,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [productos, setProductos] = useState<ProductoItem[]>(initialProductos)
   const [pagos, setPagos] = useState<Pago[]>(initialPagos)
   const [registrosRuta, setRegistrosRuta] = useState<RegistroRuta[]>(initialRegistrosRuta)
-  const [rutas, setRutas] = useState<number[]>([1, 2, 3, 4])
+  const [rutas, setRutas] = useState<number[]>([...BASE_RUTAS])
   const [isLoading, setIsLoading] = useState(true)
+  const syncInFlightRef = useRef<Promise<void> | null>(null)
 
   const applyStateFromApi = useCallback((payload: {
     ordenes: Orden[]
@@ -78,21 +81,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setProductos(payload.productos)
     setPagos(payload.pagos)
     setRegistrosRuta(payload.registrosRuta)
-    setRutas(payload.rutas)
+    setRutas(Array.from(new Set([...BASE_RUTAS, ...payload.rutas])).sort((a, b) => a - b))
   }, [])
+
+  const fetchAndApplyState = useCallback(async (errorMessage: string) => {
+    const res = await fetch("/api/state", { cache: "no-store" })
+    if (!res.ok) throw new Error(errorMessage)
+    const payload = await res.json()
+    applyStateFromApi(payload)
+  }, [applyStateFromApi])
+
+  const syncFromDatabase = useCallback(async () => {
+    if (syncInFlightRef.current) {
+      await syncInFlightRef.current
+      return
+    }
+
+    const task = (async () => {
+      try {
+        await fetchAndApplyState("No se pudo sincronizar desde la BD")
+        console.log("Sincronización desde BD completada")
+      } catch (error) {
+        console.error("Error sincronizando desde PostgreSQL:", error)
+      } finally {
+        syncInFlightRef.current = null
+      }
+    })()
+
+    syncInFlightRef.current = task
+    await task
+  }, [fetchAndApplyState])
 
   const loadFromDb = useCallback(async () => {
     try {
-      const res = await fetch("/api/state", { cache: "no-store" })
-      if (!res.ok) throw new Error("No se pudo cargar el estado")
-      const payload = await res.json()
-      applyStateFromApi(payload)
-    } catch (error) {
-      console.error("Error cargando estado desde PostgreSQL:", error)
+      await syncFromDatabase()
+    } catch {
+      // syncFromDatabase already logs errors; keep initial load resilient
     } finally {
       setIsLoading(false)
     }
-  }, [applyStateFromApi])
+  }, [syncFromDatabase])
 
   useEffect(() => {
     void loadFromDb()
@@ -251,42 +279,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const deleteRuta = useCallback((num: number) => {
+    if (BASE_RUTAS.includes(num as (typeof BASE_RUTAS)[number])) return
     setRutas((prev) => prev.filter((r) => r !== num))
   }, [])
 
   const refreshRutasFromOrdenes = useCallback(() => {
-    const today = new Date().toISOString().split("T")[0]
-
-    const rebuiltRegistros = ordenes.flatMap((orden) => {
-      const days = parseFrecuenciaDays(orden.frecuencia)
-
-      return days.map((day) => ({
-        id: 0,
-        orden_id: orden.id,
-        cliente: orden.cliente_nombre,
-        ubicacion: orden.domicilio,
-        map_lat: orden.map_lat ?? null,
-        map_lng: orden.map_lng ?? null,
-        notas: orden.notas || "",
-        estatus: "pendiente" as const,
-        evidencia1: null,
-        evidencia2: null,
-        evidencia3: null,
-        evidencia4: null,
-        evidencia5: null,
-        firma: null,
-        hora_firma: null,
-        ruta: orden.ruta,
-        dia: day,
-        fecha: today,
-      }))
-    }).map((registro, index) => ({ ...registro, id: index + 1 }))
-
-    setRegistrosRuta(rebuiltRegistros)
-
-    const rutasFromOrdenes = Array.from(new Set(ordenes.map((orden) => orden.ruta))).sort((a, b) => a - b)
-    setRutas(rutasFromOrdenes.length > 0 ? rutasFromOrdenes : [1])
-  }, [ordenes])
+    void syncFromDatabase()
+  }, [syncFromDatabase])
 
   return (
     <AppContext.Provider
@@ -299,6 +298,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         rutas,
         isLoading,
         refreshRutasFromOrdenes,
+        syncFromDatabase,
         updateOrden,
         addOrden,
         addCliente,
