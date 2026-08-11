@@ -23,7 +23,8 @@ export type Section =
   | "rutas"
   | "caja"
   | "clientes"
-  | "productos"
+  | "productos-lista"
+  | "productos-asignar"
   | "reportes"
 
 const navItems: { id: Section; label: string; icon: React.ElementType }[] = [
@@ -32,7 +33,6 @@ const navItems: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: "rutas", label: "Rutas", icon: Route },
   { id: "caja", label: "Caja", icon: Wallet },
   { id: "clientes", label: "Clientes", icon: Users },
-  { id: "productos", label: "Productos", icon: Package },
   { id: "reportes", label: "Reportes", icon: FileBarChart },
 ]
 
@@ -81,6 +81,43 @@ function NavContent({ active, onNavigate, onClose }: { active: Section; onNaviga
             </button>
           )
         })}
+
+        <div className="rounded-xl border border-sidebar-border/70 bg-muted/5 p-3 dark:bg-muted/10">
+          <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground mb-2">
+            <Package className="h-4.5 w-4.5 shrink-0" />
+            Productos
+          </div>
+          <div className="flex flex-col gap-1">
+            <button
+              onClick={() => {
+                onNavigate("productos-lista")
+                onClose?.()
+              }}
+              className={cn(
+                "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors w-full text-left",
+                active === "productos-lista"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+              )}
+            >
+              Lista de Productos
+            </button>
+            <button
+              onClick={() => {
+                onNavigate("productos-asignar")
+                onClose?.()
+              }}
+              className={cn(
+                "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors w-full text-left",
+                active === "productos-asignar"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+              )}
+            >
+              Asignar Productos
+            </button>
+          </div>
+        </div>
       </nav>
 
       <div className="border-t border-sidebar-border px-3 py-3">

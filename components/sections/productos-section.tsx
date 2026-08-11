@@ -92,14 +92,6 @@ export function ProductosSection() {
                 <TableHead>Descripcion</TableHead>
                 <TableHead>Color</TableHead>
                 <TableHead>Notas</TableHead>
-                <TableHead>Eje</TableHead>
-                <TableHead>Medida</TableHead>
-                <TableHead>Tanques</TableHead>
-                <TableHead>Agua</TableHead>
-                <TableHead>Drenaje</TableHead>
-                <TableHead>Tablones</TableHead>
-                <TableHead>Ruedas</TableHead>
-                <TableHead>Tiempo (dias)</TableHead>
                 <TableHead>Precio</TableHead>
                 <TableHead>Stock</TableHead>
                 <TableHead>Estado</TableHead>
@@ -114,14 +106,6 @@ export function ProductosSection() {
                   <TableCell className="min-w-[220px] text-xs text-muted-foreground">{p.descripcion}</TableCell>
                   <TableCell>{displayValue(p.color)}</TableCell>
                   <TableCell className="min-w-[180px] text-xs text-muted-foreground">{displayValue(p.notas)}</TableCell>
-                  <TableCell>{displayValue(p.eje)}</TableCell>
-                  <TableCell>{displayValue(p.medida)}</TableCell>
-                  <TableCell>{displayValue(p.tanques)}</TableCell>
-                  <TableCell>{displayValue(p.agua)}</TableCell>
-                  <TableCell>{displayValue(p.drenaje)}</TableCell>
-                  <TableCell>{displayValue(p.tablones)}</TableCell>
-                  <TableCell>{displayValue(p.ruedas)}</TableCell>
-                  <TableCell>{displayValue(p.tiempo)}</TableCell>
                   <TableCell className="font-semibold">{formatMXN(p.precio_renta)}</TableCell>
                   <TableCell>{p.stock}</TableCell>
                   <TableCell>
@@ -228,6 +212,168 @@ export function ProductosSection() {
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
             <Button onClick={save}>{newProducto ? "Crear" : "Guardar"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function getDefaultName(productoNombre: string, index: number) {
+  const firstWord = productoNombre.split(" ")[0] || productoNombre
+  return `${firstWord.toUpperCase()}-${String(index + 1).padStart(3, "0")}`
+}
+
+export function ProductosAsignarSection() {
+  const { productos, productoNombresAsignados, updateProductoAsignaciones, ordenes } = useAppState()
+  const [editProducto, setEditProducto] = useState<ProductoItem | null>(null)
+  const [formNames, setFormNames] = useState<string[]>([])
+  const [page, setPage] = useState(0)
+
+  const openEdit = (producto: ProductoItem) => {
+    const existingNames = productoNombresAsignados[producto.id] ?? []
+    const names = Array.from({ length: producto.stock }, (_, index) => {
+      const existing = existingNames[index]
+      return existing?.trim() ? existing : getDefaultName(producto.nombre, index)
+    })
+    setFormNames(names)
+    setEditProducto(producto)
+    setPage(0)
+  }
+
+  const getAssignmentStatus = (name: string) => {
+    const orden = ordenes.find((o) => o.producto_nombres?.includes(name))
+    if (!orden) return "Disponible"
+    return `${orden.cliente_nombre} - Orden #${orden.id}`
+  }
+
+  const saveNames = () => {
+    if (!editProducto) return
+    updateProductoAsignaciones(editProducto.id, formNames)
+    setEditProducto(null)
+  }
+
+  const closeDialog = () => {
+    setEditProducto(null)
+  }
+
+  const countAssigned = (producto: ProductoItem) => {
+    return (productoNombresAsignados[producto.id] ?? []).filter((name) => name.trim() !== "").length
+  }
+
+  const itemsPerPage = 10
+  const currentPage = editProducto ? Math.min(page, Math.max(0, Math.ceil(editProducto.stock / itemsPerPage) - 1)) : 0
+  const pageCount = editProducto ? Math.ceil(editProducto.stock / itemsPerPage) : 0
+  const pageStart = currentPage * itemsPerPage
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground tracking-tight">Asignar Productos</h2>
+          <p className="text-sm text-muted-foreground mt-1">Asignar etiquetas o nombres a cada unidad disponible según el stock.</p>
+        </div>
+      </div>
+
+      <Card>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>Nombre</TableHead>
+                <TableHead>Stock</TableHead>
+                <TableHead>Asignados</TableHead>
+                <TableHead className="w-10"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {productos.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-mono text-xs">{p.id}</TableCell>
+                  <TableCell className="font-medium">{p.nombre}</TableCell>
+                  <TableCell>{p.stock}</TableCell>
+                  <TableCell>{countAssigned(p)} / {p.stock}</TableCell>
+                  <TableCell>
+                    <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!editProducto} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Asignar nombres a unidades</DialogTitle>
+            <DialogDescription>
+              Edita los nombres de cada unidad según el stock disponible. Usa un formato como BAÑO-001 para cada unidad.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4">
+            {editProducto ? (
+              <>
+                <div className="flex flex-col gap-2 rounded-lg border border-border bg-background p-3">
+                  <div className="flex items-center justify-between gap-3 text-sm font-medium text-foreground">
+                    <span>Unidad {pageStart + 1} - {Math.min(pageStart + itemsPerPage, editProducto.stock)} de {editProducto.stock}</span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage === 0}
+                        onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
+                      >
+                        Anterior
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage >= pageCount - 1}
+                        onClick={() => setPage((prev) => Math.min(prev + 1, pageCount - 1))}
+                      >
+                        Siguiente
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                {Array.from({ length: Math.min(itemsPerPage, editProducto.stock - pageStart) }, (_, index) => {
+                  const itemIndex = pageStart + index
+                  const status = getAssignmentStatus(formNames[itemIndex] ?? getDefaultName(editProducto.nombre, itemIndex))
+                  return (
+                    <div key={itemIndex} className="grid grid-cols-[auto_1fr] items-center gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-muted-foreground">Unidad {itemIndex + 1}</span>
+                          <Badge variant="secondary" className="text-xs">
+                            {status}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{status === "Disponible" ? "Disponible" : "Asignado"}</p>
+                      </div>
+                      <Input
+                        value={formNames[itemIndex] ?? ""}
+                        placeholder={`BAÑO-${String(itemIndex + 1).padStart(3, "0")}`}
+                        onChange={(e) => {
+                          const next = [...formNames]
+                          next[itemIndex] = e.target.value
+                          setFormNames(next)
+                        }}
+                      />
+                    </div>
+                  )
+                })}
+              </>
+            ) : null}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
+            <Button onClick={saveNames}>Guardar Asignaciones</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

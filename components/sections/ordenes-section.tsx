@@ -85,6 +85,7 @@ const emptyOrden: Omit<Orden, "id" | "created_at" | "updated_at"> = {
   estado: "activo",
   renta: 0,
   producto: "Baño Portátil Estándar",
+  producto_nombres: [],
   cantidad: 1,
   ruta: 1,
   frecuencia: "Lunes",
@@ -97,13 +98,14 @@ const emptyOrden: Omit<Orden, "id" | "created_at" | "updated_at"> = {
 }
 
 export function OrdenesSection() {
-  const { ordenes, updateOrden, addOrden, clientes, productos, rutas, refreshRutasFromOrdenes } = useAppState()
+  const { ordenes, updateOrden, addOrden, clientes, productos, rutas, refreshRutasFromOrdenes, productoNombresAsignados } = useAppState()
   const [search, setSearch] = useState("")
   const [filterRuta, setFilterRuta] = useState<string>("todas")
   const [filterEstado, setFilterEstado] = useState<string>("todos")
   const [editOrder, setEditOrder] = useState<Orden | null>(null)
   const [newOrder, setNewOrder] = useState(false)
   const [form, setForm] = useState<Partial<Orden>>(emptyOrden)
+  const [assignedSelection, setAssignedSelection] = useState<string[]>([])
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [justUpdated, setJustUpdated] = useState(false)
 
@@ -130,12 +132,18 @@ export function OrdenesSection() {
   }
 
   const openEdit = (o: Orden) => {
+    const producto = productos.find((p) => p.nombre === o.producto)
+    const names = o.producto_nombres?.filter((name) => name.trim() !== "") ?? []
+    const seleccion = names.length > 0 ? names : producto ? productoNombresAsignados[producto.id] ?? [] : []
     setEditOrder(o)
     setNewOrder(false)
     setForm({ ...o, map_lat: o.map_lat ?? null, map_lng: o.map_lng ?? null })
+    setAssignedSelection(Array.from({ length: o.cantidad ?? 1 }, (_, index) => seleccion[index] ?? ""))
   }
 
   const save = () => {
+    if (!isAssignmentReady) return
+
     if (newOrder) {
       addOrden(form as Omit<Orden, "id" | "created_at" | "updated_at">)
       setNewOrder(false)
@@ -151,6 +159,67 @@ export function OrdenesSection() {
   }
 
   const isOpen = !!editOrder || newOrder
+
+  const selectedProduct = useMemo(
+    () => productos.find((p) => p.nombre === form.producto),
+    [form.producto, productos]
+  )
+
+  const selectedProductNames = useMemo(() => {
+    const nombres = selectedProduct ? productoNombresAsignados[selectedProduct.id] ?? [] : []
+    return nombres.filter((name) => name.trim() !== "")
+  }, [selectedProduct, productoNombresAsignados])
+
+  const availableNamesCount = selectedProductNames.length
+  const requiredNamesCount = Number(form.cantidad ?? 1)
+  const isAssignmentReady = availableNamesCount >= requiredNamesCount && assignedSelection.length === requiredNamesCount
+
+  useEffect(() => {
+    const max = requiredNamesCount
+    setAssignedSelection((prev) => {
+      const valid = prev.filter((name) => selectedProductNames.includes(name))
+      if (valid.length <= max) return valid
+      return valid.slice(0, max)
+    })
+  }, [requiredNamesCount, selectedProductNames])
+
+  useEffect(() => {
+    if (!isOpen) return
+    if (newOrder) {
+      setAssignedSelection(selectedProductNames.slice(0, requiredNamesCount))
+    }
+  }, [isOpen, newOrder, selectedProductNames, requiredNamesCount])
+
+  const handleSlotSelection = (slotIndex: number, name: string) => {
+    const next = [...assignedSelection]
+    next[slotIndex] = name
+    setAssignedSelection(next)
+    setForm((prev) => ({ ...prev, producto_nombres: next.filter((item) => item.trim() !== "") }))
+  }
+
+  const handleProductChange = (valor: string) => {
+    const currentQuantity = Number(form.cantidad ?? 1) || 1
+    const producto = productos.find((p) => p.nombre === valor)
+    const nombres = producto ? productoNombresAsignados[producto.id] ?? [] : []
+    const nextSelection = nombres.filter((name) => name.trim() !== "").slice(0, currentQuantity)
+    while (nextSelection.length < currentQuantity) {
+      nextSelection.push("")
+    }
+    setForm((prev) => ({ ...prev, producto: valor, producto_nombres: nextSelection.filter((item) => item.trim() !== "") }))
+    setAssignedSelection(nextSelection)
+  }
+
+  const handleQuantityChange = (cantidad: number) => {
+    const nextCantidad = Number(cantidad) || 1
+    setForm((prev) => ({ ...prev, cantidad: nextCantidad, producto_nombres: assignedSelection.slice(0, nextCantidad).filter((item) => item.trim() !== "") }))
+    setAssignedSelection((prev) => {
+      const next = prev.slice(0, nextCantidad)
+      while (next.length < nextCantidad) {
+        next.push("")
+      }
+      return next
+    })
+  }
 
   const handleRefresh = () => {
     if (isRefreshing) return
@@ -356,7 +425,7 @@ export function OrdenesSection() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Producto</label>
-                <Select value={form.producto} onValueChange={(v) => setForm({ ...form, producto: v })}>
+                <Select value={form.producto} onValueChange={handleProductChange}>
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {productos.map((p) => (
@@ -367,7 +436,58 @@ export function OrdenesSection() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Cantidad</label>
-                <Input type="number" value={form.cantidad ?? ""} onChange={(e) => setForm({ ...form, cantidad: Number(e.target.value) })} />
+                <Input type="number" value={form.cantidad ?? ""} onChange={(e) => handleQuantityChange(Number(e.target.value))} />
+              </div>
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <label className="text-sm font-medium">Nombres asignados</label>
+                <div className="rounded-lg border border-border bg-background p-3">
+                  {selectedProduct ? (
+                    selectedProductNames.length > 0 ? (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {Array.from({ length: requiredNamesCount }, (_, slotIndex) => (
+                          <div key={slotIndex} className="rounded-lg border border-border bg-surface p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-sm font-medium">Asignación {slotIndex + 1}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {assignedSelection[slotIndex] || "Sin seleccionar"}
+                              </span>
+                            </div>
+                            <Select
+                              value={assignedSelection[slotIndex] ?? ""}
+                              onValueChange={(value) => handleSlotSelection(slotIndex, value)}
+                            >
+                              <SelectTrigger className="w-full mt-3">
+                                <SelectValue placeholder="Elegir nombre" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {selectedProductNames.map((name) => (
+                                  <SelectItem key={`${slotIndex}-${name}`} value={name}>{name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No hay nombres asignados para este producto. Ve a Asignar Productos para registrar etiquetas.</p>
+                    )
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Selecciona un producto para ver los nombres asignados.</p>
+                  )}
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {selectedProduct ? (
+                      selectedProductNames.length < requiredNamesCount ? (
+                        `Faltan ${requiredNamesCount - selectedProductNames.length} nombres asignados para este producto.`
+                      ) : assignedSelection.some((value) => !value) ? (
+                        `Selecciona ${requiredNamesCount - assignedSelection.filter(Boolean).length} nombres para esta orden.`
+                      ) : (
+                        `Asignacion completa: ${requiredNamesCount} nombres seleccionados.`
+                      )
+                    ) : (
+                      "Selecciona un producto para ver los nombres asignados."
+                    )}
+                  </p>
+                </div>
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Ruta</label>
@@ -454,7 +574,7 @@ export function OrdenesSection() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
-            <Button onClick={save}>{newOrder ? "Crear" : "Guardar"}</Button>
+            <Button onClick={save} disabled={!isAssignmentReady}>{newOrder ? "Crear" : "Guardar"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

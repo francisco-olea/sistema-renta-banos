@@ -16,6 +16,7 @@ export interface Orden {
   renta: number
   producto: string
   cantidad: number
+  producto_nombres?: string[]
   ruta: RutaNum
   frecuencia: Frecuencia
   domicilio: string

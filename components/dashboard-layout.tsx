@@ -7,7 +7,7 @@ import { OrdenesSection } from "@/components/sections/ordenes-section"
 import { RutasSection } from "@/components/sections/rutas-section"
 import { CajaSection } from "@/components/sections/caja-section"
 import { ClientesSection } from "@/components/sections/clientes-section"
-import { ProductosSection } from "@/components/sections/productos-section"
+import { ProductosSection, ProductosAsignarSection } from "@/components/sections/productos-section"
 import { ReportesSection } from "@/components/sections/reportes-section"
 
 const sectionLabels: Record<Section, string> = {
@@ -16,7 +16,8 @@ const sectionLabels: Record<Section, string> = {
   rutas: "Rutas",
   caja: "Caja",
   clientes: "Clientes",
-  productos: "Productos",
+  "productos-lista": "Lista de Productos",
+  "productos-asignar": "Asignar Productos",
   reportes: "Reportes",
 }
 
@@ -40,8 +41,10 @@ export function DashboardLayout() {
         return <CajaSection />
       case "clientes":
         return <ClientesSection />
-      case "productos":
+      case "productos-lista":
         return <ProductosSection />
+      case "productos-asignar":
+        return <ProductosAsignarSection />
       case "reportes":
         return <ReportesSection />
     }

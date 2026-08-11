@@ -46,6 +46,8 @@ interface AppState {
   updateCliente: (id: number, data: Partial<Cliente>) => void
   addProducto: (data: Omit<ProductoItem, "id">) => void
   updateProducto: (id: number, data: Partial<ProductoItem>) => void
+  updateProductoAsignaciones: (id: number, nombres: string[]) => void
+  productoNombresAsignados: Record<number, string[]>
   addPago: (data: Omit<Pago, "id">) => void
   deleteOrden: (id: number) => void
   deleteCliente: (id: number) => void
@@ -62,6 +64,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [ordenes, setOrdenes] = useState<Orden[]>(initialOrdenes)
   const [clientes, setClientes] = useState<Cliente[]>(initialClientes)
   const [productos, setProductos] = useState<ProductoItem[]>(initialProductos)
+  const [productoNombresAsignados, setProductoNombresAsignados] = useState<Record<number, string[]>>({})
   const [pagos, setPagos] = useState<Pago[]>(initialPagos)
   const [registrosRuta, setRegistrosRuta] = useState<RegistroRuta[]>(initialRegistrosRuta)
   const [rutas, setRutas] = useState<number[]>([...BASE_RUTAS])
@@ -242,6 +245,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void persistMutation("PATCH", { entity: "productos", id, data })
   }, [persistMutation])
 
+  const updateProductoAsignaciones = useCallback((id: number, nombres: string[]) => {
+    setProductoNombresAsignados((prev) => ({
+      ...prev,
+      [id]: nombres,
+    }))
+  }, [])
+
   const addPago = useCallback(
     (data: Omit<Pago, "id">) => {
       const newId = Math.max(...pagos.map((p) => p.id)) + 1
@@ -305,6 +315,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updateCliente,
         addProducto,
         updateProducto,
+        updateProductoAsignaciones,
+        productoNombresAsignados,
         addPago,
         deleteOrden,
         deleteCliente,
