@@ -137,7 +137,12 @@ export function OrdenesSection() {
     const seleccion = names.length > 0 ? names : producto ? productoNombresAsignados[producto.id] ?? [] : []
     setEditOrder(o)
     setNewOrder(false)
-    setForm({ ...o, map_lat: o.map_lat ?? null, map_lng: o.map_lng ?? null })
+    setForm({
+      ...o,
+      map_lat: o.map_lat ?? null,
+      map_lng: o.map_lng ?? null,
+      producto_nombres: seleccion.slice(0, o.cantidad).filter((name) => name.trim() !== ""),
+    })
     setAssignedSelection(Array.from({ length: o.cantidad ?? 1 }, (_, index) => seleccion[index] ?? ""))
   }
 
@@ -186,7 +191,9 @@ export function OrdenesSection() {
   useEffect(() => {
     if (!isOpen) return
     if (newOrder) {
-      setAssignedSelection(selectedProductNames.slice(0, requiredNamesCount))
+      const names = selectedProductNames.slice(0, requiredNamesCount)
+      setAssignedSelection(names)
+      setForm((prev) => ({ ...prev, producto_nombres: names }))
     }
   }, [isOpen, newOrder, selectedProductNames, requiredNamesCount])
 
@@ -385,8 +392,15 @@ export function OrdenesSection() {
                 <Select
                   value={String(form.cliente_id)}
                   onValueChange={(v) => {
-                    const c = clientes.find((cl) => cl.id === Number(v))
-                    if (c) setForm({ ...form, cliente_id: c.id, cliente_nombre: c.nombre, domicilio: c.domicilio })
+                    const c = clientes.find((cl) => Number(cl.id) === Number(v))
+                    if (c) {
+                      setForm((prev) => ({
+                        ...prev,
+                        cliente_id: Number(c.id),
+                        cliente_nombre: c.nombre,
+                        domicilio: c.domicilio,
+                      }))
+                    }
                   }}
                 >
                   <SelectTrigger className="w-full"><SelectValue placeholder="Seleccionar" /></SelectTrigger>

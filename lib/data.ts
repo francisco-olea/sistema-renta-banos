@@ -47,6 +47,7 @@ export interface ProductoItem {
   precio_renta: number
   stock: number
   activo: boolean
+  nombres_asignados?: string[]
   color?: string
   notas?: string
   eje?: string

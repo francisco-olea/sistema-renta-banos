@@ -6,7 +6,27 @@ export const runtime = "nodejs"
 
 const BASE_RUTAS = [1, 2, 3, 4, 5] as const
 
-type Entity = "clientes" | "productos" | "ordenes" | "pagos"
+type Entity = "clientes" | "productos" | "productoNombres" | "ordenes" | "pagos"
+
+let productNamesSchemaReady: Promise<void> | null = null
+
+async function ensureProductNamesSchema() {
+  if (!productNamesSchemaReady) {
+    productNamesSchemaReady = pool.query(`
+      ALTER TABLE renta.productos
+        ADD COLUMN IF NOT EXISTS nombres_asignados TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+      ALTER TABLE renta.ordenes
+        ADD COLUMN IF NOT EXISTS producto_nombres TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+    `).then(() => undefined)
+  }
+
+  try {
+    await productNamesSchemaReady
+  } catch (error) {
+    productNamesSchemaReady = null
+    throw error
+  }
+}
 
 function normalizeText(value: string) {
   return value
@@ -24,6 +44,8 @@ function parseFrecuenciaDays(frecuencia: Frecuencia) {
 }
 
 async function getAllState() {
+  await ensureProductNamesSchema()
+
   const clientesRes = await pool.query(`
     SELECT id, nombre,
       COALESCE(telefono, '') AS telefono,
@@ -38,6 +60,7 @@ async function getAllState() {
 
   const productosRes = await pool.query(`
     SELECT id, nombre, descripcion, precio_renta, stock, activo,
+      COALESCE(nombres_asignados, ARRAY[]::TEXT[]) AS nombres_asignados,
       color, notas, eje, medida, tanques, agua, drenaje, tablones, ruedas, tiempo
     FROM renta.productos
     ORDER BY id
@@ -60,6 +83,7 @@ async function getAllState() {
       fecha_inicio::text AS fecha_inicio,
       fecha_fin::text AS fecha_fin,
       COALESCE(notas, '') AS notas,
+      COALESCE(producto_nombres, ARRAY[]::TEXT[]) AS producto_nombres,
       created_at::text AS created_at,
       updated_at::text AS updated_at
     FROM renta.ordenes
@@ -136,6 +160,8 @@ export async function POST(req: Request) {
   const data = body.data ?? {}
 
   try {
+    await ensureProductNamesSchema()
+
     if (entity === "clientes") {
       await pool.query(
         `
@@ -194,12 +220,12 @@ export async function POST(req: Request) {
           `
             INSERT INTO renta.ordenes (
               id, cliente_id, cliente_nombre, tipo, estado, renta, producto, cantidad, ruta,
-              frecuencia, domicilio, map_lat, map_lng, fecha_inicio, fecha_fin, notas, created_at, updated_at
+              frecuencia, domicilio, map_lat, map_lng, fecha_inicio, fecha_fin, notas, producto_nombres, created_at, updated_at
             )
             VALUES (
               COALESCE((SELECT MAX(id) + 1 FROM renta.ordenes), 1001),
               NULLIF($1, 0), $2, $3::renta.tipo_orden, $4::renta.estado_orden, $5, $6, $7, $8,
-              $9, $10, $11, $12, $13::date, NULLIF($14, '')::date, COALESCE($15, ''), CURRENT_DATE, CURRENT_DATE
+              $9, $10, $11, $12, $13::date, NULLIF($14, '')::date, COALESCE($15, ''), $16::TEXT[], CURRENT_DATE, CURRENT_DATE
             )
             RETURNING id
           `,
@@ -219,6 +245,7 @@ export async function POST(req: Request) {
             data.fecha_inicio,
             data.fecha_fin || "",
             data.notas || "",
+            Array.isArray(data.producto_nombres) ? data.producto_nombres : [],
           ]
         )
 
@@ -298,6 +325,8 @@ export async function PATCH(req: Request) {
   const data = body.data ?? {}
 
   try {
+    await ensureProductNamesSchema()
+
     if (entity === "clientes") {
       await pool.query(
         `
@@ -360,6 +389,15 @@ export async function PATCH(req: Request) {
           id,
         ]
       )
+    } else if (entity === "productoNombres") {
+      await pool.query(
+        `
+          UPDATE renta.productos
+          SET nombres_asignados = $1::TEXT[]
+          WHERE id = $2
+        `,
+        [Array.isArray(data.nombres) ? data.nombres : [], id]
+      )
     } else if (entity === "ordenes") {
       const client = await pool.connect()
       try {
@@ -383,8 +421,9 @@ export async function PATCH(req: Request) {
                 fecha_inicio = $13::date,
                 fecha_fin = NULLIF($14, '')::date,
                 notas = COALESCE($15, ''),
+                producto_nombres = $16::TEXT[],
                 updated_at = CURRENT_DATE
-            WHERE id = $16
+            WHERE id = $17
           `,
           [
             Number(data.cliente_id ?? 0),
@@ -402,6 +441,7 @@ export async function PATCH(req: Request) {
             data.fecha_inicio,
             data.fecha_fin || "",
             data.notas || "",
+            Array.isArray(data.producto_nombres) ? data.producto_nombres : [],
             id,
           ]
         )

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Droplets } from "lucide-react"
+import Image from "next/image"
 
 export function LoadingScreen({ onFinish }: { onFinish: () => void }) {
   const [progress, setProgress] = useState(0)
@@ -23,8 +23,14 @@ export function LoadingScreen({ onFinish }: { onFinish: () => void }) {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-primary">
       <div className="flex flex-col items-center gap-4">
-        <div className="flex h-20 w-20 animate-pulse items-center justify-center rounded-2xl bg-primary-foreground/10 backdrop-blur-sm">
-          <Droplets className="h-12 w-12 text-primary-foreground" />
+        <div className="flex h-20 w-20 animate-pulse items-center justify-center rounded-2xl bg-white">
+          <Image
+            src="/logo%20sp.png"
+            alt="Logo de Servicios de Renta"
+            width={64}
+            height={64}
+            className="h-14 w-14 object-contain"
+          />
         </div>
         <h1 className="text-2xl font-bold text-primary-foreground">
           Servicios de Renta

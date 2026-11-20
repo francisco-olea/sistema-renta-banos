@@ -1,12 +1,13 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { useAuth } from "@/lib/auth-context"
 import { useAppState } from "@/lib/app-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Bubbles, Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff } from "lucide-react"
 import { LoadingScreen } from "@/components/loading-screen"
 
 export function LoginForm() {
@@ -48,8 +49,15 @@ export function LoginForm() {
     <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-primary">
-            <Bubbles className="h-7 w-7 text-primary-foreground" />
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-white">
+            <Image
+              src="/logo%20sp.png"
+              alt="Logo de Servicios de Renta"
+              width={48}
+              height={48}
+              className="h-10 w-10 object-contain"
+              priority
+            />
           </div>
           <CardTitle className="mt-4 text-xl">Baños Portátiles</CardTitle>
           <CardDescription>Sistema de Gestión de Renta</CardDescription>

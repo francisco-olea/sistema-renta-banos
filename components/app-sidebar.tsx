@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
@@ -13,7 +14,6 @@ import {
   Package,
   FileBarChart,
   LogOut,
-  Bubbles,
   Menu,
 } from "lucide-react"
 
@@ -49,8 +49,14 @@ function NavContent({ active, onNavigate, onClose }: { active: Section; onNaviga
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2.5 px-4 py-5 border-b border-sidebar-border">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-          <Bubbles className="h-5 w-5 text-primary-foreground" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white">
+          <Image
+            src="/logo%20sp.png"
+            alt="Logo de Servicios de Renta"
+            width={30}
+            height={30}
+            className="h-7 w-7 object-contain"
+          />
         </div>
         <div className="flex flex-col">
           <span className="text-sm font-semibold text-sidebar-foreground leading-tight">Servicios de Renta</span>

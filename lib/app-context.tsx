@@ -82,6 +82,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setOrdenes(payload.ordenes)
     setClientes(payload.clientes)
     setProductos(payload.productos)
+    const nombresAsignados: Record<number, string[]> = {}
+    for (const producto of payload.productos) {
+      nombresAsignados[Number(producto.id)] = producto.nombres_asignados ?? []
+    }
+    setProductoNombresAsignados(nombresAsignados)
     setPagos(payload.pagos)
     setRegistrosRuta(payload.registrosRuta)
     setRutas(Array.from(new Set([...BASE_RUTAS, ...payload.rutas])).sort((a, b) => a - b))
@@ -250,7 +255,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...prev,
       [id]: nombres,
     }))
-  }, [])
+    void persistMutation("PATCH", {
+      entity: "productoNombres",
+      id,
+      data: { nombres },
+    })
+  }, [persistMutation])
 
   const addPago = useCallback(
     (data: Omit<Pago, "id">) => {
