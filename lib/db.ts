@@ -4,20 +4,32 @@ declare global {
   var __pgPool: Pool | undefined
 }
 
-const connectionConfig = {
-  host: process.env.PGHOST,
-  port: process.env.PGPORT ? Number(process.env.PGPORT) : 5432,
-  database: process.env.PGDATABASE,
-  user: process.env.PGUSER,
-  password: process.env.PGPASSWORD,
-  ssl: (() => {
-    const mode = (process.env.PGSSLMODE || "disable").toLowerCase()
-    if (mode === "require" || mode === "verify-ca" || mode === "verify-full") {
-      return { rejectUnauthorized: false }
+const connectionString =
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.POSTGRES_PRISMA_URL
+
+const sslMode = process.env.PGSSLMODE?.toLowerCase()
+const sslConfig =
+  sslMode === "require" || sslMode === "verify-ca" || sslMode === "verify-full"
+    ? { rejectUnauthorized: false }
+    : sslMode
+      ? false
+      : undefined
+
+const connectionConfig = connectionString
+  ? {
+      connectionString,
+      ...(sslConfig === undefined ? {} : { ssl: sslConfig }),
     }
-    return false
-  })(),
-}
+  : {
+      host: process.env.PGHOST,
+      port: process.env.PGPORT ? Number(process.env.PGPORT) : 5432,
+      database: process.env.PGDATABASE,
+      user: process.env.PGUSER,
+      password: process.env.PGPASSWORD ?? "",
+      ssl: sslConfig ?? false,
+    }
 
 export const pool = global.__pgPool ?? new Pool(connectionConfig)
 
